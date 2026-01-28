@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Gummy Bear Pet</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Volume Controls -->
+    <div class="volume-controls">
+        <div class="volume-control">
+            <label for="master-volume">🔊</label>
+            <input type="range" id="master-volume" min="0" max="100" value="70">
+            <span id="master-value">70%</span>
+        </div>
+        <div class="volume-control">
+            <label for="music-volume">🎵</label>
+            <input type="range" id="music-volume" min="0" max="100" value="30">
+            <span id="music-value">30%</span>
+        </div>
+        <div class="volume-control">
+            <label for="sfx-volume">🎮</label>
+            <input type="range" id="sfx-volume" min="0" max="100" value="50">
+            <span id="sfx-value">50%</span>
+        </div>
+    </div>
+
+    <!-- Help Button -->
+    <button class="help-btn" id="help-btn" onclick="toggleGuide()">?</button>
+
+    <!-- Game Guide Modal -->
+    <div class="guide-modal" id="guide-modal">
+        <div class="guide-content">
+            <button class="guide-close" onclick="toggleGuide()">✕</button>
+            <h2>How to Play</h2>
+
+            <div class="guide-section">
+                <h3>Stats to Monitor</h3>
+                <div class="guide-item">
+                    <img src="assets/life.png" alt="Health">
+                    <div>
+                        <strong>Health:</strong> Keep your pet healthy! Low health means game over.
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <img src="assets/hunger.png" alt="Hunger">
+                    <div>
+                        <strong>Hunger:</strong> Feed your pet regularly to keep them full.
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <img src="assets/rest.png" alt="Energy">
+                    <div>
+                        <strong>Energy:</strong> Let your pet sleep when they're tired.
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <img src="assets/happines.png" alt="Happiness">
+                    <div>
+                        <strong>Happiness:</strong> Play with your pet to keep them happy!
+                    </div>
+                </div>
+            </div>
+
+            <div class="guide-section">
+                <h3>Actions</h3>
+                <div class="guide-item">
+                    <img src="assets/feed_button.png" alt="Feed">
+                    <div><strong>Feed:</strong> Gives food to your pet</div>
+                </div>
+                <div class="guide-item">
+                    <img src="assets/play_button.png" alt="Play">
+                    <div><strong>Play:</strong> Makes your pet happy</div>
+                </div>
+                <div class="guide-item">
+                    <img src="assets/clean_button.png" alt="Clean">
+                    <div><strong>Clean:</strong> Remove poops from the area</div>
+                </div>
+                <div class="guide-item">
+                    <img src="assets/sleep_button.png" alt="Sleep">
+                    <div><strong>Sleep:</strong> Restores energy</div>
+                </div>
+                <div class="guide-item">
+                    <img src="assets/medicine_button.png" alt="Medicine">
+                    <div><strong>Medicine:</strong> Heals your pet</div>
+                </div>
+            </div>
+
+            <div class="guide-section">
+                <h3>Tips</h3>
+                <ul>
+                    <li>Your pet will tell you when they need something</li>
+                    <li>Clean up poops to keep your pet healthy</li>
+                    <li>Don't overfeed or force sleep when not needed</li>
+                    <li>Watch out for the day/night cycle!</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="game-container">
+        <div class="title-container">
+            <img src="assets/title.png" alt="Tamagotchi" class="game-title">
+        </div>
+
+        <!-- Main Game Area -->
+        <div class="game-layout">
+            <!-- Game Screen -->
+            <div class="game-screen-wrapper">
+                <div class="game-screen" id="game-screen">
+                    <div class="pet-container" id="pet-container">
+                        <div id="pet-sprite"></div>
+                    </div>
+
+                    <!-- Poop elements -->
+                    <div id="poop-container"></div>
+
+                    <!-- Status message -->
+                    <div class="status-message" id="status-message"></div>
+
+                    <!-- Stats Panel (inside game screen) -->
+                    <div class="stats-panel">
+                        <div class="stat">
+                            <img src="assets/life.png" class="stat-icon-img" alt="Health">
+                            <div class="stat-bar">
+                                <div class="stat-fill health" id="health-bar"></div>
+                            </div>
+                        </div>
+
+                        <div class="stat">
+                            <img src="assets/hunger.png" class="stat-icon-img" alt="Hunger">
+                            <div class="stat-bar">
+                                <div class="stat-fill hunger" id="hunger-bar"></div>
+                            </div>
+                        </div>
+
+                        <div class="stat">
+                            <img src="assets/rest.png" class="stat-icon-img" alt="Energy">
+                            <div class="stat-bar">
+                                <div class="stat-fill energy" id="energy-bar"></div>
+                            </div>
+                        </div>
+
+                        <div class="stat">
+                            <img src="assets/happines.png" class="stat-icon-img" alt="Happiness">
+                            <div class="stat-bar">
+                                <div class="stat-fill happiness" id="happiness-bar"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Game Over Screen -->
+                    <div class="game-over" id="game-over">
+                        <img src="assets/game over.png" alt="Game Over" class="game-over-image">
+                        <p class="game-over-reason" id="game-over-reason"></p>
+                        <p class="tap-to-continue">Tap to continue</p>
+                    </div>
+                </div>
+
+                <!-- Overlay -->
+                <div class="overlay"></div>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="action-buttons">
+            <button class="action-btn" id="feed-btn" onclick="game.feed()">
+                <img src="assets/feed_button.png" alt="Feed">
+            </button>
+            <button class="action-btn" id="play-btn" onclick="game.play()">
+                <img src="assets/play_button.png" alt="Play">
+            </button>
+            <button class="action-btn" id="clean-btn" onclick="game.clean()">
+                <img src="assets/clean_button.png" alt="Clean">
+            </button>
+            <button class="action-btn" id="sleep-btn" onclick="game.sleep()">
+                <img src="assets/sleep_button.png" alt="Sleep">
+            </button>
+            <button class="action-btn" id="medicine-btn" onclick="game.giveMedicine()">
+                <img src="assets/medicine_button.png" alt="Medicine">
+            </button>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
