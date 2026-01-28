@@ -30,7 +30,7 @@ A virtual pet game featuring an adorable gummy bear! Take care of your pet by fe
 
 ## 🚀 Live Demo
 
-[Play the game here!](#) _(GitHub Pages link will be added)_
+[Play the game here!](https://TatoSAI.github.io/My-Gummy-Bear-Pet/)
 
 ## 💻 Local Development
 
