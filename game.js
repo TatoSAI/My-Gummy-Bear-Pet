@@ -22,22 +22,39 @@ class TamagotchiGame {
 
         // Poop probability multiplier
         this.poopProbabilityMultiplier = 1;
+        this.lastDigestionTime = Date.now(); // Timer for digestion (multiplier decay)
+        this.consecutiveFeedWindow = 20000; // 20 seconds window for consecutive feeding
+
+        // Sickness system (triggered by prolonged dirtiness)
+        this.isSick = false;
+        this.sicknessStartTime = null;
+        this.lastDirtinessPenaltyTime = Date.now();
+
+        // Exhaustion collapse system
+        this.energyDepletedTime = null; // When energy reached 0
+        this.exhaustionCollapseCount = 0; // How many times collapsed from exhaustion
+        this.lastCollapseResetTime = Date.now(); // Reset counter every 5 minutes
 
         // Game state
         this.poopCount = 0;
         this.maxPoops = 5;
         this.isAlive = true;
+        this.isSleeping = false; // Track if currently sleeping
         this.currentAnimation = 'idle';
         this.gameOverReason = '';
 
-        // Animation config: [sprite path, total frames, fps, loop, columns]
+        // Animation config: [sprite path, total frames, fps, loop, columns, loopStart (optional)]
+        // loopStart: if specified, plays frames 0 to loopStart-1 once, then loops from loopStart to end
         this.animations = {
             idle: { sprite: 'assets/bear-idle.png', frames: 36, fps: 10, loop: true, columns: 6 },
             eat: { sprite: 'assets/bear-eat.png', frames: 28, fps: 10, loop: false, columns: 5 },
             walk: { sprite: 'assets/bear-walk.png', frames: 36, fps: 12, loop: true, columns: 6 },
             poop: { sprite: 'assets/bear-poop.png', frames: 16, fps: 10, loop: false, columns: 4 },
             sad: { sprite: 'assets/bear-sad.png', frames: 36, fps: 8, loop: true, columns: 6 },
-            sleep: { sprite: 'assets/bear-sleep.png', frames: 36, fps: 8, loop: true, columns: 6 }
+            sleep: { sprite: 'assets/bear-sleep.png', frames: 36, fps: 8, loop: true, columns: 6, loopStart: 7 },
+            happy: { sprite: 'assets/bear-happy.png', frames: 36, fps: 10, loop: true, columns: 6 },
+            sick: { sprite: 'assets/bear-sick.png', frames: 36, fps: 8, loop: true, columns: 6 },
+            silly: { sprite: 'assets/bear-silly.png', frames: 36, fps: 10, loop: true, columns: 6 }
         };
 
         // Animation state
@@ -61,53 +78,53 @@ class TamagotchiGame {
         this.lastFlavorDialogue = Date.now();
         this.flavorDialogues = {
             day: [
-                "What a beautiful day!",
-                "The sun feels nice...",
-                "I love sunny days!",
-                "Perfect weather today!",
-                "The birds are singing!"
+                "Pretty day!",
+                "Sun is warm!",
+                "Love the sun!",
+                "Nice outside!",
+                "Birdie sounds!"
             ],
             night: [
-                "The stars are pretty...",
-                "It's so peaceful at night",
-                "I can see the moon!",
-                "Night time is cozy",
-                "The crickets are chirping"
+                "Stars twinkle!",
+                "So quiet...",
+                "Moon is big!",
+                "Night time~",
+                "Hear crickets!"
             ],
             nature: [
-                "I can smell flowers!",
-                "The wind feels nice",
-                "I hear leaves rustling",
-                "Nature is wonderful",
-                "The grass is soft here"
+                "Smells nice!",
+                "Breezy!",
+                "Leaves go swoosh!",
+                "Pretty flowers!",
+                "Soft grass!"
             ],
             happy: [
-                "I'm having so much fun!",
-                "Life is good!",
-                "I feel great today!",
-                "This is amazing!",
-                "I'm so happy!"
+                "So much fun!",
+                "Hehe!",
+                "Best day ever!",
+                "Wheee!",
+                "Happy happy!"
             ],
             tired: [
-                "I could use a nap...",
-                "Feeling a bit sleepy",
-                "My eyes are heavy...",
-                "Maybe I should rest",
-                "Yawn... so tired"
+                "Sleepy...",
+                "Yaaawn...",
+                "Eyes heavy...",
+                "Wanna nap...",
+                "*yawn*"
             ],
             hungry_mild: [
-                "I could eat something",
-                "Getting a bit hungry",
-                "A snack would be nice",
-                "My tummy is rumbling",
-                "Food sounds good right now"
+                "Mmm... food...",
+                "Tummy rumbles...",
+                "Snack time?",
+                "Smells yummy...",
+                "Want treat..."
             ],
             content: [
-                "Everything is just right",
-                "I'm feeling good!",
-                "This is nice",
-                "Life is peaceful",
-                "I'm comfortable here"
+                "Feel good!",
+                "This is nice!",
+                "All comfy!",
+                "So peaceful...",
+                "Cozy here!"
             ]
         };
 
@@ -226,10 +243,10 @@ class TamagotchiGame {
         const gameScreen = document.getElementById('game-screen');
         if (this.isNight) {
             gameScreen.classList.add('night');
-            this.showMessage('Night time...');
+            this.showMessage('Night night...');
         } else {
             gameScreen.classList.remove('night');
-            this.showMessage('Good morning!');
+            this.showMessage('Morning!');
         }
     }
 
@@ -247,21 +264,23 @@ class TamagotchiGame {
 
             const now = Date.now();
 
-            // Hunger decreases every 10 seconds
-            if (now - this.lastFeedTime > 10000) {
+            // Hunger decreases every 15 seconds (30 seconds if sleeping - half speed)
+            const hungerInterval = this.isSleeping ? 30000 : 15000;
+            if (now - this.lastFeedTime > hungerInterval) {
                 this.hunger = Math.max(0, this.hunger - 5);
                 this.lastFeedTime = now;
             }
 
-            // Happiness decreases every 15 seconds
-            if (now - this.lastPlayTime > 15000) {
+            // Happiness decreases every 20 seconds (40 seconds if sleeping - half speed)
+            const happinessInterval = this.isSleeping ? 40000 : 20000;
+            if (now - this.lastPlayTime > happinessInterval) {
                 this.happiness = Math.max(0, this.happiness - 5);
                 this.lastPlayTime = now;
             }
 
-            // Energy decreases slowly over time (every 30 seconds)
-            // Double drain at night
-            if (now - this.lastSleepTime > 30000) {
+            // Energy decreases slowly over time (every 40 seconds)
+            // Double drain at night, BUT doesn't drain while sleeping
+            if (!this.isSleeping && now - this.lastSleepTime > 40000) {
                 const energyDrain = this.isNight ? 6 : 3;
                 this.energy = Math.max(0, this.energy - energyDrain);
                 this.lastSleepTime = now;
@@ -274,20 +293,75 @@ class TamagotchiGame {
                 this.updateDayNight();
             }
 
-            // Random poop generation with probability multiplier
-            const basePoopTime = 40000 + Math.random() * 20000;
+            // Natural digestion: multiplier decreases over time (every 15 seconds)
+            if (now - this.lastDigestionTime > 15000) {
+                this.poopProbabilityMultiplier = Math.max(1, this.poopProbabilityMultiplier - 0.3);
+                this.lastDigestionTime = now;
+            }
+
+            // Random poop generation with probability multiplier (slower: 60-90s instead of 40-60s)
+            const basePoopTime = 60000 + Math.random() * 30000;
             const adjustedPoopTime = basePoopTime / this.poopProbabilityMultiplier;
             if (now - this.lastPoopTime > adjustedPoopTime) {
                 if (this.poopCount < this.maxPoops) {
                     this.createPoop();
                     this.lastPoopTime = now;
-                    // Reset multiplier after pooping
-                    this.poopProbabilityMultiplier = Math.max(1, this.poopProbabilityMultiplier - 0.5);
+                    // Small reduction after pooping
+                    this.poopProbabilityMultiplier = Math.max(1, this.poopProbabilityMultiplier - 0.2);
                 }
             }
 
             // Cleanliness decreases with poops
             this.cleanliness = Math.max(0, 100 - (this.poopCount * 20));
+
+            // SICKNESS SYSTEM: Start timer when 3+ poops, get sick after 60 seconds
+            if (this.poopCount >= 3) {
+                // Start sickness timer if not already started and not sick
+                if (!this.isSick && this.sicknessStartTime === null) {
+                    this.sicknessStartTime = now;
+                }
+
+                // Check if 60 seconds have passed and not yet sick
+                if (this.sicknessStartTime !== null && now - this.sicknessStartTime > 60000 && !this.isSick) {
+                    this.isSick = true;
+                    this.showMessage('Not feeling good...');
+                    // Force sick animation immediately
+                    if (this.currentAnimation !== 'sick' && !this.isAnimating) {
+                        this.setAnimation('sick');
+                    }
+                }
+            } else if (this.poopCount < 3) {
+                // Reset sickness timer if cleaned up
+                this.sicknessStartTime = null;
+            }
+
+            // ESCALATED DIRTINESS PENALTIES (every 10 seconds)
+            if (now - this.lastDirtinessPenaltyTime > 10000) {
+                this.lastDirtinessPenaltyTime = now;
+
+                // 2 poops (60% clean): Minor happiness loss
+                if (this.poopCount >= 2) {
+                    this.happiness = Math.max(0, this.happiness - 3);
+                }
+
+                // 3 poops (40% clean): More happiness loss
+                if (this.poopCount >= 3) {
+                    this.happiness = Math.max(0, this.happiness - 5);
+                }
+
+                // 4 poops (20% clean): Toxic environment - affects energy too
+                if (this.poopCount >= 4) {
+                    this.happiness = Math.max(0, this.happiness - 7);
+                    this.energy = Math.max(0, this.energy - 5);
+                }
+
+                // 5 poops (0% clean): Critical state - all stats degrade
+                if (this.poopCount >= 5) {
+                    this.happiness = Math.max(0, this.happiness - 10);
+                    this.energy = Math.max(0, this.energy - 8);
+                    this.hunger = Math.max(0, this.hunger - 5); // Too stressed to eat properly
+                }
+            }
 
             // Health damage from various conditions
             // Not eating (hunger < 20) damages health
@@ -295,9 +369,60 @@ class TamagotchiGame {
                 this.health = Math.max(0, this.health - 0.5);
             }
 
-            // Not cleaning (cleanliness < 30) damages health
-            if (this.cleanliness < 30) {
-                this.health = Math.max(0, this.health - 0.3);
+            // ESCALATED HEALTH DAMAGE FROM DIRTINESS
+            if (this.poopCount >= 3) {
+                // Base damage from dirtiness (cleanliness < 40)
+                this.health = Math.max(0, this.health - 0.4);
+            }
+
+            if (this.poopCount >= 4) {
+                // Increased damage (cleanliness < 20)
+                this.health = Math.max(0, this.health - 0.6);
+            }
+
+            if (this.poopCount >= 5) {
+                // Critical damage (cleanliness = 0)
+                this.health = Math.max(0, this.health - 1.0);
+            }
+
+            // SICKNESS DAMAGE: If bear is sick, health degrades faster
+            if (this.isSick) {
+                this.health = Math.max(0, this.health - 0.8);
+            }
+
+            // EXHAUSTION COLLAPSE SYSTEM: If energy = 0 for too long, bear collapses and sleeps
+            if (this.energy === 0 && !this.isSleeping) {
+                // Start timer when energy reaches 0
+                if (this.energyDepletedTime === null) {
+                    this.energyDepletedTime = now;
+                }
+
+                // After 30 seconds with energy = 0, force sleep (collapse)
+                if (now - this.energyDepletedTime > 30000 && !this.isAnimating) {
+                    this.exhaustionCollapseCount++;
+                    this.energyDepletedTime = null; // Reset timer
+                    this.showMessage('So sleepy...');
+
+                    // Force sleep due to exhaustion (longer sleep: 15s)
+                    this.performExhaustionSleep();
+
+                    // If collapsed 3+ times in last 5 minutes, high chance of getting sick
+                    if (this.exhaustionCollapseCount >= 3 && !this.isSick) {
+                        if (Math.random() < 0.7) { // 70% chance
+                            this.isSick = true;
+                            this.showMessage('Feel icky...');
+                        }
+                    }
+                }
+            } else if (this.energy > 0) {
+                // Reset exhaustion timer if energy recovers
+                this.energyDepletedTime = null;
+            }
+
+            // Reset exhaustion collapse counter every 5 minutes
+            if (now - this.lastCollapseResetTime > 300000) {
+                this.exhaustionCollapseCount = 0;
+                this.lastCollapseResetTime = now;
             }
 
             // Game over if health reaches 0
@@ -313,11 +438,23 @@ class TamagotchiGame {
             if (criticalState) {
                 if (this.sadnessStartTime === null) {
                     this.sadnessStartTime = now;
-                    this.setAnimation('sad');
+                    // Sick takes priority over sad
+                    if (this.isSick) {
+                        this.setAnimation('sick');
+                    } else {
+                        this.setAnimation('sad');
+                    }
                 }
 
-                // Game over after 60 seconds in critical state
-                if (now - this.sadnessStartTime > 60000) {
+                // Game over time depends on the condition (increased from 60s to 90s)
+                let gameOverTime = 90000; // Default: 90 seconds (was 60s)
+
+                // Faster game over if dirty (45 seconds instead of 90, was 30s)
+                if (this.cleanliness === 0) {
+                    gameOverTime = 45000;
+                }
+
+                if (now - this.sadnessStartTime > gameOverTime) {
                     // Determine which stat caused game over
                     if (this.hunger === 0) {
                         this.gameOverReason = 'hungry';
@@ -329,17 +466,28 @@ class TamagotchiGame {
                     this.gameOver();
                 }
             } else {
-                // Check if pet becomes sad (low stats but not 0)
-                const isSad = this.hunger < 30 || this.happiness < 30 || this.cleanliness < 30;
-
-                if (isSad) {
-                    if (!this.isAnimating && this.currentAnimation !== 'sad' && this.sadnessStartTime === null) {
-                        this.setAnimation('sad');
+                // Priority: sick > sad > idle
+                // Check if pet is sick (highest priority)
+                if (this.isSick) {
+                    // Sick animation can interrupt these animations (NOT walk)
+                    const interruptibleAnimations = ['idle', 'sad', 'happy'];
+                    if (this.currentAnimation !== 'sick' && interruptibleAnimations.includes(this.currentAnimation)) {
+                        this.setAnimation('sick');
                     }
-                } else {
-                    this.sadnessStartTime = null;
-                    if (!this.isAnimating && this.currentAnimation === 'sad') {
-                        this.setAnimation('idle');
+                }
+                // Check if pet becomes sad (low stats but not 0)
+                else if (!this.isSick) {
+                    const isSad = this.hunger < 30 || this.happiness < 30 || this.cleanliness < 30;
+
+                    if (isSad) {
+                        if (!this.isAnimating && this.currentAnimation !== 'sad' && this.sadnessStartTime === null) {
+                            this.setAnimation('sad');
+                        }
+                    } else {
+                        this.sadnessStartTime = null;
+                        if (!this.isAnimating && (this.currentAnimation === 'sad' || this.currentAnimation === 'sick')) {
+                            this.setAnimation('idle');
+                        }
                     }
                 }
             }
@@ -365,18 +513,24 @@ class TamagotchiGame {
         // Only complain every 15 seconds to avoid spam
         if (now - this.lastComplaintTime < 15000) return;
 
-        // Priority order: health, hunger, energy, happiness
-        if (this.health < 30) {
-            this.showMessage('I feel sick!');
+        // Priority order: sickness, health, dirtiness, hunger, energy, happiness
+        if (this.isSick) {
+            this.showMessage('Feel bad...');
+            this.lastComplaintTime = now;
+        } else if (this.health < 30) {
+            this.showMessage('Owwie...');
+            this.lastComplaintTime = now;
+        } else if (this.poopCount >= 4) {
+            this.showMessage("Stinky here!");
             this.lastComplaintTime = now;
         } else if (this.hunger < 30) {
-            this.showMessage("I'm so hungry!");
+            this.showMessage("Tummy hurts...");
             this.lastComplaintTime = now;
         } else if (this.energy < 30) {
-            this.showMessage("I'm so tired!");
+            this.showMessage("So sleepy...");
             this.lastComplaintTime = now;
         } else if (this.happiness < 30) {
-            this.showMessage("I'm bored!");
+            this.showMessage("Bored...");
             this.lastComplaintTime = now;
         }
     }
@@ -440,6 +594,11 @@ class TamagotchiGame {
         // Random sleep animation only if very tired (energy <= 30)
         if (this.energy <= 30 && Math.random() < 0.005) {
             this.performSleep();
+        }
+
+        // Random happy animation when happiness is very high (>= 90)
+        if (this.happiness >= 90 && Math.random() < 0.008) {
+            this.performHappy();
         }
     }
 
@@ -506,24 +665,32 @@ class TamagotchiGame {
 
         // Don't interrupt current animation
         if (this.isAnimating) {
-            this.showMessage('Wait a moment!');
+            this.showMessage('Wait!');
             return;
         }
 
         // Check if already full
         if (this.hunger >= 90) {
-            this.showMessage("I'm too full!");
+            this.showMessage("Too full!");
             this.health = Math.max(0, this.health - 10);
             this.updateStats();
             return;
         }
 
+        const now = Date.now();
+
+        // Check if this is consecutive feeding (within 20 seconds of last feed)
+        const timeSinceLastFeed = now - this.lastFeedTime;
+        if (timeSinceLastFeed < this.consecutiveFeedWindow) {
+            // Consecutive feeding increases poop multiplier (overeating)
+            this.poopProbabilityMultiplier = Math.min(3, this.poopProbabilityMultiplier + 0.5);
+        }
+        // If feeding is well-spaced, multiplier stays the same or continues natural decay
+
         this.hunger = Math.min(100, this.hunger + 30);
-        this.lastFeedTime = Date.now();
+        this.lastFeedTime = now;
 
-        // Eating increases poop probability
-        this.poopProbabilityMultiplier = Math.min(3, this.poopProbabilityMultiplier + 0.8);
-
+        this.isAnimating = true; // Prevent interruption during eating
         this.setAnimation('eat');
         this.showMessage('Yum yum!');
         this.petContainer.classList.add('bounce');
@@ -531,6 +698,16 @@ class TamagotchiGame {
         // Eat animation: 28 frames at 10fps = 2.8s
         setTimeout(() => {
             this.petContainer.classList.remove('bounce');
+            this.isAnimating = false; // Animation finished
+
+            // After eating, if very happy, sometimes do silly animation
+            if (this.happiness > 75 && Math.random() < 0.3) {
+                setTimeout(() => {
+                    if (!this.isAnimating) {
+                        this.performSilly();
+                    }
+                }, 500);
+            }
         }, 2800);
 
         this.updateStats();
@@ -543,13 +720,13 @@ class TamagotchiGame {
 
         // Don't interrupt current animation
         if (this.isAnimating) {
-            this.showMessage('Wait a moment!');
+            this.showMessage('Wait!');
             return;
         }
 
         // Check if too tired (low energy)
         if (this.energy <= 20) {
-            this.showMessage("I'm too tired!");
+            this.showMessage("Too tired...");
             this.health = Math.max(0, this.health - 15);
             this.energy = Math.max(0, this.energy - 10);
             this.updateStats();
@@ -558,7 +735,7 @@ class TamagotchiGame {
 
         if (this.happiness >= 90) {
             // Too happy, doesn't want to play
-            this.showMessage("I don't want to play now!");
+            this.showMessage("Not now!");
             return;
         }
 
@@ -569,13 +746,13 @@ class TamagotchiGame {
         this.energy = Math.max(0, this.energy - 20);
         this.hunger = Math.max(0, this.hunger - 15);
 
-        this.showMessage('Yay! So fun!');
+        this.showMessage('Yippee!');
 
         // Show hearts above the bear
         this.showHearts();
 
-        // Move to random position when playing
-        this.moveToRandomPosition();
+        // Use happy animation when playing
+        this.performHappy();
 
         this.updateStats();
     }
@@ -613,16 +790,29 @@ class TamagotchiGame {
         this.playSound('tick');
 
         if (this.poopCount === 0) {
-            this.showMessage('Everything is clean!');
+            this.showMessage('All clean!');
             return;
         }
+
+        // Calculate bonus based on how dirty it was
+        const wasVerydirty = this.poopCount >= 4;
+        const happinessBonus = wasVerydirty ? 20 : 10;
 
         // Remove all poops
         this.poopContainer.innerHTML = '';
         this.poopCount = 0;
         this.cleanliness = 100;
-        this.happiness = Math.min(100, this.happiness + 10);
-        this.showMessage('So clean!');
+        this.happiness = Math.min(100, this.happiness + happinessBonus);
+
+        // Reset sickness timer (prevents getting sick), but does NOT cure existing sickness
+        this.sicknessStartTime = null;
+
+        // Show appropriate message
+        if (this.isSick) {
+            this.showMessage('Better! Still icky...');
+        } else {
+            this.showMessage('Sparkly clean!');
+        }
 
         this.updateStats();
     }
@@ -634,13 +824,13 @@ class TamagotchiGame {
 
         // Don't interrupt current animation
         if (this.isAnimating) {
-            this.showMessage('Wait a moment!');
+            this.showMessage('Wait!');
             return;
         }
 
-        // Check if has enough energy (energy > 60)
-        if (this.energy > 60) {
-            this.showMessage("I don't want to sleep now!");
+        // Check if has enough energy (energy > 70, more lenient since sleep is longer now)
+        if (this.energy > 70) {
+            this.showMessage("Not sleepy!");
             this.happiness = Math.max(0, this.happiness - 15);
             this.updateStats();
             return;
@@ -651,10 +841,14 @@ class TamagotchiGame {
 
     performSleep() {
         this.isAnimating = true;
+        this.isSleeping = true; // Mark as sleeping to affect decay rates
         this.setAnimation('sleep');
         this.showMessage('Zzz...');
 
-        // Restore energy while sleeping
+        // Sleep duration: longer at night (12s) vs day (10s)
+        const sleepDuration = this.isNight ? 12000 : 10000;
+
+        // Restore energy while sleeping (10 per second)
         const sleepInterval = setInterval(() => {
             if (this.currentAnimation === 'sleep') {
                 this.energy = Math.min(100, this.energy + 10);
@@ -665,10 +859,88 @@ class TamagotchiGame {
         setTimeout(() => {
             clearInterval(sleepInterval);
             this.isAnimating = false;
+            this.isSleeping = false; // Wake up
             if (this.currentAnimation === 'sleep') {
                 this.setAnimation('idle');
             }
-        }, 5000);
+        }, sleepDuration);
+    }
+
+    performExhaustionSleep() {
+        this.isAnimating = true;
+        this.isSleeping = true;
+        this.setAnimation('sleep');
+
+        // Exhaustion sleep is longer (15 seconds) because they collapsed
+        const sleepDuration = 15000;
+
+        // Restore energy while sleeping (slower: 8 per second instead of 10)
+        const sleepInterval = setInterval(() => {
+            if (this.currentAnimation === 'sleep') {
+                this.energy = Math.min(100, this.energy + 8);
+                this.updateStats();
+            }
+        }, 1000);
+
+        setTimeout(() => {
+            clearInterval(sleepInterval);
+            this.isAnimating = false;
+            this.isSleeping = false;
+            if (this.currentAnimation === 'sleep') {
+                // Show warning message after waking
+                setTimeout(() => {
+                    this.showMessage('Still tired...');
+                }, 500);
+                this.setAnimation('idle');
+            }
+        }, sleepDuration);
+    }
+
+    performHappy() {
+        this.isAnimating = true;
+        this.setAnimation('happy');
+
+        const happyMessages = [
+            'Yay!',
+            'Wheee!',
+            'Fun fun!',
+            'Love this!',
+            'Best!'
+        ];
+        const randomMessage = happyMessages[Math.floor(Math.random() * happyMessages.length)];
+        this.showMessage(randomMessage);
+
+        // Wait for happy animation to show, THEN move
+        setTimeout(() => {
+            this.isAnimating = false;
+
+            // Move to random position after showing happy animation
+            if (this.currentAnimation === 'happy') {
+                this.moveToRandomPosition();
+            }
+        }, 2000);
+    }
+
+    performSilly() {
+        this.isAnimating = true;
+        this.setAnimation('silly');
+
+        const sillyMessages = [
+            'Hehe!',
+            'Silly time!',
+            'Watch!',
+            'Tada!',
+            'Look!'
+        ];
+        const randomMessage = sillyMessages[Math.floor(Math.random() * sillyMessages.length)];
+        this.showMessage(randomMessage);
+
+        setTimeout(() => {
+            this.isAnimating = false;
+            if (this.currentAnimation === 'silly') {
+                this.setAnimation('idle');
+            }
+        }, 3000);
     }
 
     giveMedicine() {
@@ -678,19 +950,41 @@ class TamagotchiGame {
 
         // Don't interrupt current animation
         if (this.isAnimating) {
-            this.showMessage('Wait a moment!');
+            this.showMessage('Wait!');
             return;
         }
 
-        // Check if health is already at maximum
-        if (this.health >= 90) {
-            this.showMessage("I don't need medicine!");
+        // Check if health is already at maximum and not sick
+        if (this.health >= 90 && !this.isSick) {
+            this.showMessage("Don't need!");
             return;
         }
 
-        this.health = Math.min(100, this.health + 30);
-        this.happiness = Math.max(0, this.happiness - 20);
-        this.showMessage('Yuck! Bad taste!');
+        // Cure sickness if sick
+        const wasSick = this.isSick;
+        if (this.isSick) {
+            this.isSick = false;
+            this.sicknessStartTime = null;
+            this.health = Math.min(100, this.health + 40); // More health recovery when sick
+            this.happiness = Math.max(0, this.happiness - 10); // Less happiness penalty when actually sick
+            this.showMessage('Blegh! Yucky!');
+        } else {
+            // Normal medicine use
+            this.health = Math.min(100, this.health + 30);
+            this.happiness = Math.max(0, this.happiness - 20);
+            this.showMessage('Yuck!');
+        }
+
+        // Change animation from sick to appropriate state after curing
+        if (wasSick && this.currentAnimation === 'sick') {
+            // Check updated stats after medicine
+            const isSad = this.hunger < 30 || this.happiness < 30 || this.cleanliness < 30;
+            if (isSad) {
+                this.setAnimation('sad');
+            } else {
+                this.setAnimation('idle');
+            }
+        }
 
         this.updateStats();
     }
@@ -706,7 +1000,7 @@ class TamagotchiGame {
         const currentBottom = parseFloat(this.petContainer.style.bottom) || 75;
 
         this.setAnimation('poop');
-        this.showMessage('Oops...');
+        this.showMessage('Oopsie!');
 
         // Wait for poop animation to finish (16 frames at 10fps = 1.6s)
         // Create poop element near the end
@@ -727,7 +1021,7 @@ class TamagotchiGame {
                 poop.remove();
                 this.poopCount--;
                 this.cleanliness = Math.min(100, 100 - (this.poopCount * 20));
-                this.showMessage('Cleaned!');
+                this.showMessage('Gone!');
                 this.updateStats();
                 this.updateDepth(); // Update depths after removing poop
             });
@@ -750,8 +1044,8 @@ class TamagotchiGame {
 
         const anim = this.animations[animName];
 
-        // Don't interrupt non-looping animations (eat, poop, sleep)
-        const interruptibleAnimations = ['idle', 'walk', 'sad'];
+        // Don't interrupt non-looping animations (eat, poop, sleep, silly)
+        const interruptibleAnimations = ['idle', 'walk', 'sad', 'happy', 'sick'];
         if (this.isAnimating && !interruptibleAnimations.includes(this.currentAnimation)) {
             return; // Don't interrupt important animations
         }
@@ -795,7 +1089,9 @@ class TamagotchiGame {
             // Handle loop or end
             if (this.currentFrame >= anim.frames) {
                 if (anim.loop) {
-                    this.currentFrame = 0;
+                    // If loopStart is defined, loop back to that frame instead of 0
+                    // This allows for "intro + loop" animations (e.g., eyes closing, then sleeping loop)
+                    this.currentFrame = anim.loopStart !== undefined ? anim.loopStart : 0;
                 } else {
                     // Animation finished, go back to idle
                     clearInterval(this.animationTimer);
@@ -899,10 +1195,22 @@ class TamagotchiGame {
 
         // Reset multipliers
         this.poopProbabilityMultiplier = 1;
+        this.lastDigestionTime = Date.now();
+
+        // Reset sickness system
+        this.isSick = false;
+        this.sicknessStartTime = null;
+        this.lastDirtinessPenaltyTime = Date.now();
+
+        // Reset exhaustion collapse system
+        this.energyDepletedTime = null;
+        this.exhaustionCollapseCount = 0;
+        this.lastCollapseResetTime = Date.now();
 
         // Reset game state
         this.poopCount = 0;
         this.isAlive = true;
+        this.isSleeping = false;
         this.currentAnimation = 'idle';
         this.isAnimating = false;
         this.gameOverReason = '';
