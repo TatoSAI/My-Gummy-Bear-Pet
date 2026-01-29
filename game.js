@@ -1071,6 +1071,9 @@ class TamagotchiGame {
         const sheetHeight = rows * this.frameSize * this.scale;
         this.petSprite.style.backgroundSize = `${sheetWidth}px ${sheetHeight}px`;
 
+        // Set initial frame position immediately to prevent flicker
+        this.petSprite.style.backgroundPosition = '0px 0px';
+
         // Calculate frame duration in ms
         const frameDuration = 1000 / anim.fps;
 
